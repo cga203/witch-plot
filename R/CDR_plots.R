@@ -9,6 +9,11 @@
 #' ---
 
 library(roxygen2)
+
+#' Also needs the following, but these are already loaded when calling R/witch_functions.R:
+#'  dplyr
+
+
 #### q_emi_co2_beccs ####
 
 #-> Calculate the parameter outside gams
@@ -126,8 +131,18 @@ saveplot("q_emi_co2_beccs pathway", width = 15, height=10)
 graph_ctax_vs_q_emi_beccs_co2<-function(){
   graphData<- q_emi_co2_beccs2
   graphData<-graphData[apply(as.matrix(graphData$file),1,function(x) all (x %in% as.matrix(stop_nash[stop_nash$value==1,"file"]))),]
-
-  ggplot(data=graphData, aes(x=ctax, y=value))+
+  graphData<-graphData[graphData$t==30]
+  
+  # If I want to graph the differences instead
+  dataGraph_diff<- graphData %>%
+    mutate(
+      diff_value= c(NA,diff(value)/5),
+      x_for_diff= ctax#[-1]
+    ) %>%
+    filter(!is.na(diff_value))
+  
+  ggplot(data=dataGraph_diff, aes(x=x_for_diff, y=diff_value))+ 
+ # ggplot(data=graphData, aes(x=ctax, y=value))+
     geom_point(aes(color=t))+
     labs(y= "[GtC/yr]", x= "ctax [T$/GTonC]", title = "CO2 emissions from bioenergy with CCS" )+
     geom_smooth(method = "loess", 
@@ -150,7 +165,7 @@ graph_ctax_vs_q_emi_beccs_co2<-function(){
 }
 
 graph_ctax_vs_q_emi_beccs_co2()
-saveplot("q_emi_co2_beccs vs ctax", width = 15, height=10)
+saveplot("q_emi_co2_beccs vs ctax-diff-t30", width = 15, height=10)
 
 #' @param dataVar the dataframe of the var I want to create the world value
 #' @return dataframe with columns t, n, file, ctax, value where n="World"
@@ -215,8 +230,16 @@ graph_ctax_vs_var<-function(varName, graphTitle, varUnit){
   dataGraph<-dataGraph[apply(as.matrix(dataGraph$file),1,function(x) all (x %in% as.matrix(stop_nash[stop_nash$value==1,"file"]))),]
   dataGraph<-dataGraph[dataGraph$t==30]
   
+  # If I want to graph the differences instead
+  dataGraph_diff<- dataGraph %>%
+    mutate(
+      diff_value= c(NA,diff(value)/5),
+      x_for_diff= ctax#[-1]
+    ) %>%
+    filter(!is.na(diff_value))
   
-  ggplot(data=dataGraph, aes(x=ctax, y=value))+
+  ggplot(data=dataGraph_diff, aes(x=x_for_diff, y=diff_value))+ 
+  #ggplot(data=dataGraph, aes(x=ctax, y=value))+
     geom_point(aes(color=t))+ 
     labs(y= varUnit, , x= "ctax [T$/GTonC]", title = graphTitle )+
     facet_wrap(~n,scales="free_y") +
@@ -248,7 +271,16 @@ graph_ctax_vs_var<-function(varName, graphTitle, varUnit){
 #'@return creates a graph with ctax on the x-axis, the value of the var in the y-axis,
 #' all years t as data points with different color
 graph_ctax_vs_var_data<-function(dataGraph, graphTitle, varUnit){
-  ggplot(data=dataGraph, aes(x=ctax, y=diff(value)/5))+
+  # If I want to graph the differences instead
+  dataGraph_diff<- dataGraph %>%
+    mutate(
+      diff_value= c(NA,diff(value)/5),
+      x_for_diff= ctax
+    ) %>%
+    filter(!is.na(diff_value))
+
+  # ggplot(data=dataGraph_diff, aes(x=x_for_diff, y=diff_value))+ 
+  ggplot(data=dataGraph, aes(x=ctax, y=value))+ # Use this one when do not want differences
     geom_point(aes(color=t))+ 
     labs(y= varUnit, , x= "ctax [T$/GTonC]", title = graphTitle )+
     facet_wrap(~n,scales="free_y") +
@@ -270,9 +302,12 @@ graph_ctax_vs_var_data<-function(dataGraph, graphTitle, varUnit){
     )
 }
 
+# For master, use
 graph_ctax_vs_var("K_DAC", "DAC installed capacity", "[GtC]")
-saveplot("K_DAC vs ctax", width = 15, height=10)
+graph_ctax_vs_var("K_DAC", "DAC installed capacity-diff", "[GtC]") #Manually using the code with diff
+saveplot("K_DAC (diff) vs ctax-only t30", width = 15, height=10)
 
+# For DAC-branch, see below
 
 
 graph_var_pathway<- function(varName, graphTitle, varUnit){
@@ -320,25 +355,73 @@ graph_var_pathway_data<- function(dataGraph, graphTitle, varUnit){
     )
 }
 
+# For master, use
 graph_var_pathway("K_DAC", "DAC installed capacity pathway", "[GtC]")
 saveplot("K_DAC pathway", width = 15, height=10)
 
+# For DAC-branch, see below
 
 #'--------------------------------
-#' For K_En(elbigcc)
+#'HERE FOR DAC-branch
+#' For K_EN(jdac,t,n)
+
+#' For one of the DAC technologies, starting with solid sorbent because it was the one in the original
+#' implementation
+
+K_EN_dac<- getVarGraphData("K_EN", c("jreal", "t", "n"))
+K_EN_dac<-filterRuns_NashNotConverged(K_EN_dac) #slow, takes time
+
+K_EN_dac_ls<-K_EN_dac[K_EN_dac$jreal=="dac_ls",]
+
+graph_var_pathway_data(K_EN_dac_ls,"Capital in DAC liquid sorbent","[GtC]")
+saveplot("K_EN(dac_ls) pathway", width = 15, height=10)
+
+K_EN_dac_ls<-K_EN_dac_ls[K_EN_dac_ls$t==30,]
+#graph_ctax_vs_var_data(K_EN_dac_ls, "Capital in DAC liquid sorbent","[GtC]") # When the function does not calculate diff, manually changed
+#saveplot("K_EN(dac_ls) vs ctax", width = 15, height=10)
+
+graph_ctax_vs_var_data(K_EN_dac_ls, "Capital in DAC liquid sorbent-diff","[GtC]")
+saveplot("K_EN(dac_ls) vs ctax -diff-t30", width = 15, height=10) 
+
+K_EN_dac_ss<-K_EN_dac[K_EN_dac$jreal=="dac_ss",]
+
+graph_var_pathway_data(K_EN_dac_ss,"Capital in DAC solid sorbent","[GtC]")
+saveplot("K_EN(dac_ss) pathway", width = 15, height=10)
+
+K_EN_dac_ss<-K_EN_dac_ss[K_EN_dac_ss$t==30,]
+#graph_ctax_vs_var_data(K_EN_dac_ss, "Capital in DAC solid sorbent","[GtC]") # When the function does not calculate diff, manually changed
+#saveplot("K_EN(dac_ss) vs ctax", width = 15, height=10)
+
+graph_ctax_vs_var_data(K_EN_dac_ss, "Capital in DAC solid sorbent-diff","[GtC]")
+saveplot("K_EN(dac_ss) vs ctax -diff-t30", width = 15, height=10) 
+
+
+
+
+# TO DO:
+# Still want to create a var that aggregates the investment in all DAC technologies
+
+
+#'--------------------------------
+#' For K_EN(elbigcc)
 
 K_EN_elbigcc<- getVarGraphData("K_EN", c("jreal", "t", "n"))
 K_EN_elbigcc<-filterRuns_NashNotConverged(K_EN_elbigcc) #slow, takes time
 K_EN_elbigcc<-K_EN_elbigcc[K_EN_elbigcc$jreal=="elbigcc",]
 
-graph_ctax_vs_var_data(K_EN_elbigcc, "Capital in electricity with biomass and CCS","[TW]")
-saveplot("K_EN(elbigcc) vs ctax", width = 15, height=10)
-
-graph_ctax_vs_var_data(K_EN_elbigcc, "Capital in electricity with biomass and CCS-diff","[TW]")
-saveplot("K_EN(elbigcc) vs ctax -diff", width = 15, height=10)
-
 graph_var_pathway_data(K_EN_elbigcc,"Capital in electricity with biomass and CCS","[TW]")
 saveplot("K_EN(elbigcc) pathway", width = 15, height=10)
+
+K_EN_elbigcc<-K_EN_elbigcc[K_EN_elbigcc$t==30,]
+
+#graph_ctax_vs_var_data(K_EN_elbigcc, "Capital in electricity with biomass and CCS","[TW]")
+#saveplot("K_EN(elbigcc) vs ctax", width = 15, height=10)
+
+graph_ctax_vs_var_data(K_EN_elbigcc, "Capital in electricity with biomass and CCS-diff","[TW]")
+#saveplot("K_EN(elbigcc) vs ctax -diff", width = 15, height=10) #Not yet working with diff
+saveplot("K_EN(elbigcc) vs ctax -diff-t30", width = 15, height=10) #Not yet working with diff
+
+
 
 #'--------------------------------
 #' For Q_EMI(ccs, co2_daccs, co2_plant_ccs)
@@ -347,22 +430,31 @@ Q_EMI<-getVarGraphData("Q_EMI", c("e", "t", "n"))
 Q_EMI<-filterRuns_NashNotConverged(Q_EMI)
 
 Q_EMI_ccs<-Q_EMI[Q_EMI$e=="ccs",]
-graph_ctax_vs_var_data(Q_EMI_ccs, "Emissions from ccs",  "[GtCe/year]")
-saveplot("Q_EMI(ccs) vs ctax", width=15, height=10)
+
 
 graph_var_pathway_data(Q_EMI_ccs, "Emissions from ccs",  "[GtCe/year]")
 saveplot("Q_EMI(ccs) pathway", width=15, height=10)
 
+Q_EMI_ccs<-Q_EMI_ccs[Q_EMI_ccs$t==30,]
+graph_ctax_vs_var_data(Q_EMI_ccs, "Emissions from ccs",  "[GtCe/year]")
+saveplot("Q_EMI(ccs) vs ctax-diff-t30", width=15, height=10)
+
 Q_EMI_co2_daccs<-Q_EMI[Q_EMI$e=="co2_daccs",]
-graph_ctax_vs_var_data(Q_EMI_co2_daccs, "Emissions from co2_daccs",  "[GtCe/year]")
-saveplot("Q_EMI(co2_daccs) vs ctax", width=15, height=10)
 
 graph_var_pathway_data(Q_EMI_co2_daccs, "Emissions from co2_daccs",  "[GtCe/year]")
 saveplot("Q_EMI(co2_daccs) pathway", width=15, height=10)
 
+Q_EMI_co2_daccs<-Q_EMI_co2_daccs[Q_EMI_co2_daccs$t==30,]
+graph_ctax_vs_var_data(Q_EMI_co2_daccs, "Emissions from co2_daccs",  "[GtCe/year]")
+saveplot("Q_EMI(co2_daccs) vs ctax-diff-t30", width=15, height=10)
+
 Q_EMI_co2_plant_ccs<-Q_EMI[Q_EMI$e=="co2_plant_ccs",]
-graph_ctax_vs_var_data(Q_EMI_co2_plant_ccs, "Emissions from co2_plant_ccs",  "[GtCe/year]")
-saveplot("Q_EMI(co2_plant_ccs) vs ctax", width=15, height=10)
 
 graph_var_pathway_data(Q_EMI_co2_plant_ccs, "Emissions from co2_plant_ccs",  "[GtCe/year]")
 saveplot("Q_EMI(co2_plant_ccs) pathway", width=15, height=10)
+
+Q_EMI_co2_plant_ccs<-Q_EMI_co2_plant_ccs[Q_EMI_co2_plant_ccs$t==30,]
+graph_ctax_vs_var_data(Q_EMI_co2_plant_ccs, "Emissions from co2_plant_ccs",  "[GtCe/year]")
+saveplot("Q_EMI(co2_plant_ccs) vs ctax-diff-t30", width=15, height=10)
+
+

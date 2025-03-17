@@ -1,10 +1,13 @@
 rm(list = ls())
-witch_folder = "../witch" #Where you're WITCH code is located
+#witch_folder = "../witch" #Where you're WITCH code is located
+witch_folder = '/Users/cindyazuero/Documents/WITCH model/witch-master'
 #main directory of your results files
-main_folder <- witch_folder # by default, the witch source folder
-#main_folder <- "C:/Users/Emmerling/Documents/Dropbox (CMCC)/EIEE/WITCH_CODING/WITCH_RUNS_2018/submission_cdlinks/2019_04_15"
-subdir = c("") #can be multiple directories
-
+#main_folder <- witch_folder # by default, the witch source folder
+# With DAC branch
+main_folder <- '/Users/cindyazuero/CMCC Dropbox/Cindy Azuero/WITCH/Results/CDR_curves-Oct2024/'
+# With master
+#main_folder <- "/Users/cindyazuero/CMCC Dropbox/Cindy Azuero/WITCH/Results/CDR_curves-Oct2024/ctax-oct15_2024"
+subdir = c("./DAC_branch/DAC_branch_ctax_Dec09_2024", "./ctax-oct15_2024") #can be multiple directories
 
 restrict_files = c("results_") #to all scenarios matching partly one of its arguments
 exclude_files = c("")

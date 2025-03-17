@@ -6,9 +6,12 @@
 #' Meant to construct the graphs for the CDR Curves
 #' 
 #' This file must be called inside plotgdx_witch.R or at least ran after plotgdx_witch.R
+#' 
+#' - Dec 12: Add pathdir to compare different subdirectories in the graphs
 #' ---
 
 library(roxygen2)
+library(ggpattern)
 
 #' Also needs the following, but these are already loaded when calling R/witch_functions.R:
 #'  dplyr
@@ -171,12 +174,12 @@ saveplot("q_emi_co2_beccs vs ctax-diff-t30", width = 15, height=10)
 #' @return dataframe with columns t, n, file, ctax, value where n="World"
 getWorld<-function(dataVar, idIndeces){
   idIndeces2<-idIndeces[idIndeces!="n"]
-  indecesFilter<-c(idIndeces2,"file")
+  indecesFilter<-c(idIndeces2,"file", "pathdir")
   # Obtain world as the aggregation of all regions n for each pair of (t, file)
   world_var <- dataVar %>% group_by_at(indecesFilter) %>% summarize(value=sum(value)) %>% mutate(n="World")
   # Since in this ran, all regions have the same tax, the tax used for world will be the one of Brazil
-  world_var<-merge(world_var, model_ctax[model_ctax$n=="brazil",  c("t", "file", "ctax")],all.x=TRUE)
-  indecesOrder<-c(idIndeces, "file", "ctax", "value")
+  world_var<-merge(world_var, model_ctax[model_ctax$n=="brazil",  c("t", "file","pathdir", "ctax")],all.x=TRUE)
+  indecesOrder<-c(idIndeces, "file", "pathdir","ctax", "value")
   world_var<-world_var[,indecesOrder]
   world_var
 }
@@ -186,9 +189,10 @@ getWorld<-function(dataVar, idIndeces){
 #' @return a dataframe with the data required to create a graph using ctax and the value of the var, including the "World" region
 getVarGraphData<-function(varName, indicesM){
   var<-get_witch(varName)
-  var<-merge(var, model_ctax[,c("t", "n","file", "ctax")], all.x=TRUE) # Those years and scenarios without ctax are with NA
   #browser()
-  cols<-c(indicesM,"file", "ctax", "value")
+  var<-merge(var, model_ctax[,c("t", "n","file","pathdir", "ctax")], all.x=TRUE) # Those years and scenarios without ctax are with NA
+  #browser()
+  cols<-c(indicesM,"file","pathdir", "ctax", "value")
   varSimplified<-var[,..cols]
   #varSimplified<-var[,c("t", "n", "file", "ctax", "value")]
   
@@ -334,9 +338,11 @@ graph_var_pathway<- function(varName, graphTitle, varUnit){
     )
 }
 
+# TO Do, need to add the line pattern so I can consider the additional dimention of pathdir
+
 graph_var_pathway_data<- function(dataGraph, graphTitle, varUnit){
-  ggplot(data=dataGraph, aes(x=ttoyear(t), y=value, group=ctax_final))+
-    geom_line(aes(color=ctax_final))+
+  ggplot(data=dataGraph, aes(x=ttoyear(t), y=value, group=interaction(ctax_final, pathdir)))+
+    geom_line(aes(color=ctax_final, linetype=pathdir))+
     labs(y= varUnit, title = graphTitle)+
     facet_wrap(~n,scales="free_y") +
     theme(plot.title=element_text(size=14),
@@ -368,8 +374,10 @@ saveplot("K_DAC pathway", width = 15, height=10)
 #' For one of the DAC technologies, starting with solid sorbent because it was the one in the original
 #' implementation
 
-K_EN_dac<- getVarGraphData("K_EN", c("jreal", "t", "n"))
-K_EN_dac<-filterRuns_NashNotConverged(K_EN_dac) #slow, takes time
+K_EN<-getVarGraphData("K_EN", c("jreal", "t", "n"))
+K_EN<-filterRuns_NashNotConverged(K_EN) #slow, takes time
+
+K_EN_dac<- K_EN
 
 K_EN_dac_ls<-K_EN_dac[K_EN_dac$jreal=="dac_ls",]
 
@@ -396,17 +404,51 @@ graph_ctax_vs_var_data(K_EN_dac_ss, "Capital in DAC solid sorbent-diff","[GtC]")
 saveplot("K_EN(dac_ss) vs ctax -diff-t30", width = 15, height=10) 
 
 
+# Aggregate data on the 3 technologies
+
+#' @param dataVar the dataframe of the var I want to create the world value
+#' @return dataframe with columns t, n, file, ctax, value where n="World"
+getAllDAC<-function(dataVar, idIndeces){
+  idIndeces2<-idIndeces[idIndeces!="jreal"] 
+  indecesFilter<-c(idIndeces2,"file", "pathdir", "ctax", "ctax_final")
+  # Obtain world as the aggregation of all regions n for each pair of (t, file)
+  allDAC_var <- dataVar %>% group_by_at(indecesFilter) %>% summarize(value=sum(value)) %>% mutate(jreal="dac_all")
+  # Since in this ran, all regions have the same tax, the tax used for world will be the one of Brazil
+  #allDAC_var<-merge(allDAC_var, model_ctax[model_ctax$n=="brazil",  c("t", "file","pathdir", "ctax")],all.x=TRUE)
+  indecesOrder<-c(idIndeces, "file", "pathdir","ctax", "value", "ctax_final")
+  allDAC_var<-allDAC_var[,indecesOrder]
+  allDAC_var
+}
+
+K_EN_DAC_all<-K_EN[K_EN$jreal=="dac_ls" |K_EN$jreal=="dac_ss" | K_EN$jreal=="dac_cao" ,]
+aggregatedDAC<- getAllDAC(K_EN_DAC_all, c("jreal", "t", "n"))
+K_EN_DAC_all<-rbind(K_EN_DAC_all,aggregatedDAC)
+
+graph_var_pathway_data(aggregatedDAC,"Capital in DAC (3 technologies)","[GtC]")
+saveplot("K_EN(dac_all) pathway", width = 15, height=10)
 
 
-# TO DO:
-# Still want to create a var that aggregates the investment in all DAC technologies
+# Need to get K_DAC
+K_DAC<- getVarGraphData("K_DAC", c("t", "n"))
+K_DAC<-K_DAC[apply(as.matrix(K_DAC$file),1,function(x) all (x %in% as.matrix(stop_nash[stop_nash$value==1,"file"]))),]
+# add var jreal so it can be rbind
+K_DAC_to_rbind<-K_DAC
+K_DAC_to_rbind$jreal<- "dac_ss"
+# Reorder variables
+colOrder<-c("jreal", "t", "n","file","pathdir", "ctax", "value", "ctax_final")
+K_DAC_to_rbind<- K_DAC_to_rbind[,..colOrder]
 
 
+K_EN_DAC_all_2branches<-rbind(K_DAC_to_rbind, K_EN_DAC_all)
+
+#Filter only for ss to compare
+K_EN_DAC_ss_2branches<-K_EN_DAC_all_2branches[K_EN_DAC_all_2branches$jreal=="dac_ss",]
+graph_var_pathway_data(K_EN_DAC_ss_2branches,"Capital in DAC for solid sorbent (old vs new)","[GtC]")
+saveplot("Capital in DAC for solid sorbent -old vs new--pathway", width = 15, height=10) 
 #'--------------------------------
 #' For K_EN(elbigcc)
 
-K_EN_elbigcc<- getVarGraphData("K_EN", c("jreal", "t", "n"))
-K_EN_elbigcc<-filterRuns_NashNotConverged(K_EN_elbigcc) #slow, takes time
+K_EN_elbigcc<- K_EN
 K_EN_elbigcc<-K_EN_elbigcc[K_EN_elbigcc$jreal=="elbigcc",]
 
 graph_var_pathway_data(K_EN_elbigcc,"Capital in electricity with biomass and CCS","[TW]")
@@ -457,4 +499,34 @@ Q_EMI_co2_plant_ccs<-Q_EMI_co2_plant_ccs[Q_EMI_co2_plant_ccs$t==30,]
 graph_ctax_vs_var_data(Q_EMI_co2_plant_ccs, "Emissions from co2_plant_ccs",  "[GtCe/year]")
 saveplot("Q_EMI(co2_plant_ccs) vs ctax-diff-t30", width=15, height=10)
 
+#--------------------------------
+# dac_kmax
+dac_kmax<- getVarGraphData("dac_kmax", c("n"))
+dac_kmax<- dac_kmax[dac_kmax$file=="results_ssp2_bau" & dac_kmax$n!="World", ]
 
+ggplot(data=dac_kmax, aes(x=n, y=value, color=pathdir))+
+  geom_bar(stat="identity", position="dodge") +  # Create a bar plot
+  labs(y= "GtC/yr", title = "DAC maximum capacity")+
+  #facet_wrap(~n,scales="free_y") +
+  theme(plot.title=element_text(size=14),
+        #panel.grid.major = element_blank(),
+        #panel.grid.minor = element_blank(),
+        #       panel.background = element_blank(),
+        axis.title.x = element_blank(), #element_text(size=12),
+        axis.title.y = element_text(size = 14),
+        axis.text = element_text(size=14),
+        legend.text = element_text(size=12),
+        legend.title = element_text(size=12),
+        legend.position = "bottom",
+        #       #legend.spacing = unit(3, "mm"),
+        legend.key.width = unit(3, "cm"),
+        #strip.text = element_text(size=14)
+  )
+
+#--------------------------------
+
+#Get data for MCOST_INV and OEM_DAC graphs
+dac_inv0_old<- 730*1.11*0.81*1E-3
+newRow<-data.frame(jdac="dac_ss", value=dac_inv0_old, n="World", file= "results_ssp2_value", pathdir="")
+dac_inv0<-get_witch("dac_inv0") # only getting for DAC_branch
+dac_floor_cost<-get_witch("dac_floor_cost")
